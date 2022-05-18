@@ -13,12 +13,10 @@ from typing import Optional, Dict, Any
 
 import tkinter as tk
 from tkinter import ttk
-
 import myNotebook as nb
 from theme import theme
 
 from config import appname, appversion
-from EDMCLogging import get_main_logger
 
 plugin_name=os.path.basename(os.path.dirname(__file__))
 logger=logging.getLogger(f'{appname}.{plugin_name}')
@@ -37,61 +35,68 @@ if not logger.hasHandlers():
     logger.addHandler(logger_channel)
 
 def plugin_start3(plugin_dir: str) -> str:
-    logger.info("Started")
     return plugin_name
 
 def plugin_app(parent: tk.Frame) -> tk.Frame:
     global tree
     frame = tk.Frame(parent)
+    frame.rowconfigure(1,weight=1)
+    frame.rowconfigure(0,weight=1)
+    frame.columnconfigure(0,weight=1)
     head = ttk.Label(frame,wraplength=200,justify="left",text="")
-    head.pack(side="top")
+    head.grid(row=0,sticky=tk.EW)
     tree = ttk.Treeview(frame,columns=('BodyName','Class'))
-    tree.column(0,width=100);
-    tree.column(1,width=100);
+    tree.column("#0",width=10,minwidth=0,stretch="no");
+    tree.column("BodyName",width=100,minwidth=50,stretch="yes");
+    tree.column("Class",width=100,minwidth=50,stretch="yes");
     tree.heading('BodyName',text="Body Name")
     tree.heading('Class',text="Class")
-    tree.pack(side="left")
-    #theme.update(this.frame)
+    tree.grid(row=1,sticky=tk.EW)
+    theme.update(frame)
     return frame
 
 def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Dict[str,Any], state: Dict[str, Any]) -> None:
     global tree
 
     # Think about using match
-    if entry['event'] not in ("FSDJump", "FSSDiscoveryScan","Scan","FSSBodySignals","SAAScanComplete","ScanBaryCentre"):
-        return None
-    if entry['event'] == 'FSDJump':
+    if entry['event'] in ('FSDJump','CarrierJump'):
         # We have arrived somewhere
         # clear body list. 
         # Maybe get data from edsm, eddiscovery seems to do this. 
         #   https://www.edsm.net/api-system-v1/bodies?systemName={name}
         #   https://www.edsm.net/api-system-v1/bodies?systemId64={id}
-        # Maybe a sqlite cache?
+        # Maybe a sqlite cache? Or just json on disk?
         # Useful info:
         #   StarSystem, SystemAddress
+        for item in tree.get_children():
+            tree.delete(item)
         return None
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
         # Useful info:
         #   Bodycount, SystemName, SystemAddress, Progress
-        head['text']=f'{event["progress"]*event["bodycount"]}/{event["Bodycount"]}'
+        head.config(text=f'{event["progress"]*event["bodycount"]}/{event["Bodycount"]}')
         return None
     # more detailed scan, Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan
     if entry['event'] == 'Scan':
         # Useful info:
         #   BodyName, BodyID, Parents[0], SystemAddress, PlanetClass, Atmosphere,
         #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
+        parentid=parental_placeholders(entry['Parents'])
 
-        ## TODO break out into a separate func
-        # Find out if parent exists. If not, create
-        heir=[ list(parent.values)[0] for parent in entry["parents"] ]
-        for c,iid in enumerate(reversed(heir)):
-            if not tree.item(iid):
-               if c == 0:
-                   tree.insert(0,iid=iid,values=("Unknown body","Unknown class"))
-               else:
-                   tree.insert(heir[c-1],iid=iid,values=("Unknown body","Unknown class"))
-        tree.insert(heir[0],iid=event['BodyID'],values=(event['BodyName'],event['PlanetClass']))
+        if "PlanetClass" in entry.keys():
+            if tree.exists(entry['BodyID']):
+                # update
+                tree.item(entry['BodyID'],values=(entry['BodyName'],entry['PlanetClass']))
+            else:
+                tree.insert(parentid,0,iid=entry['BodyID'],open=True,values=(entry['BodyName'],entry['PlanetClass']))
+        elif "StarType" in entry.keys():
+            if tree.exists(entry['BodyID']):
+                # update
+                tree.item(entry['BodyID'],values=(entry['BodyName'],entry['StarType']))
+            else:
+                tree.insert(parentid,0,iid=entry['BodyID'],open=True,values=(entry['BodyName'],entry['StarType']))
+
         return None
     if entry['event'] == "FSSBodySignals":
         # Surface stuff, e.g. bio/vulc.
@@ -108,4 +113,25 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
     if entry['event']=='ScanBaryCentre': 
         return None
     return None
+
+def parental_placeholders(parents: list) -> int:
+    """
+    Parent info from a scan is a list of ordered dictionaries, starting with
+    the direct parent, then parent's parent etc. Annoyingly, each parent is in
+    a dict, with type of parent as the key and the bodyid as the value.
+
+    If we don't already have the parent(s) in the tree we'll add placeholders
+    """
+    global tree
+    parentiid=0
+    # Find out if parent exists. If not, create
+    for p in reversed(parents):
+        for obj,iid in p.items():
+            if not tree.exists(iid):
+                if parentiid == iid:
+                    tree.insert('',0,iid=iid,open=True,values=("Unknown",f'{obj}'))
+                else:
+                    tree.insert(parentiid,0,iid=iid,open=True,values=("Unknown",f'{obj}'))
+            parentiid=iid
+    return parentiid
 
