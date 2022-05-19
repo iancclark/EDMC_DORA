@@ -1,11 +1,3 @@
-"""
-Notes:
-    https://hosting.zaonce.net/community/journal/v33/Journal_Manual_v33.pdf
-    https://github.com/Marginal/HabZone/blob/master/load.py
-    https://github.com/EDCD/EDMarketConnector/blob/main/PLUGINS.md
-    https://github.com/EDDiscovery/EDDiscovery
-"""
-
 import logging
 import os
 import semantic_version
@@ -45,11 +37,10 @@ def plugin_app(parent: tk.Frame) -> tk.Frame:
     frame.columnconfigure(0,weight=1)
     head = ttk.Label(frame,wraplength=200,justify="left",text="")
     head.grid(row=0,sticky=tk.EW)
-    tree = ttk.Treeview(frame,columns=('BodyName','Class'))
-    tree.column("#0",width=10,minwidth=0,stretch="no");
-    tree.column("BodyName",width=100,minwidth=50,stretch="yes");
+    tree = ttk.Treeview(frame,columns=('Class'))
+    tree.column("#0",width=100,minwidth=50,stretch="yes");
     tree.column("Class",width=100,minwidth=50,stretch="yes");
-    tree.heading('BodyName',text="Body Name")
+    tree.heading('#0',text="Body Name")
     tree.heading('Class',text="Class")
     tree.grid(row=1,sticky=tk.EW)
     theme.update(frame)
@@ -87,15 +78,15 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         if "PlanetClass" in entry.keys():
             if tree.exists(entry['BodyID']):
                 # update
-                tree.item(entry['BodyID'],values=(entry['BodyName'],entry['PlanetClass']))
+                tree.item(entry['BodyID'],text=entry['BodyName'],values=(entry['PlanetClass'],entry['DistanceFromArrivalLS']))
             else:
-                tree.insert(parentid,0,iid=entry['BodyID'],open=True,values=(entry['BodyName'],entry['PlanetClass']))
+                tree.insert(parentid,0,iid=entry['BodyID'],open=True,text=entry['BodyName'],values=(entry['PlanetClass'],entry['DistanceFromArrivalLS']))
         elif "StarType" in entry.keys():
             if tree.exists(entry['BodyID']):
                 # update
-                tree.item(entry['BodyID'],values=(entry['BodyName'],entry['StarType']))
+                tree.item(entry['BodyID'],text=entry['BodyName'],values=(entry['StarType'],entry['DistanceFromArrivalLS']))
             else:
-                tree.insert(parentid,0,iid=entry['BodyID'],open=True,values=(entry['BodyName'],entry['StarType']))
+                tree.insert(parentid,0,iid=entry['BodyID'],open=True,text=entry['BodyName'],values=(entry['StarType'],entry['DistanceFromArrivalLS']))
 
         return None
     if entry['event'] == "FSSBodySignals":
@@ -129,9 +120,9 @@ def parental_placeholders(parents: list) -> int:
         for obj,iid in p.items():
             if not tree.exists(iid):
                 if parentiid == iid:
-                    tree.insert('',0,iid=iid,open=True,values=("Unknown",f'{obj}'))
+                    tree.insert('',0,iid=iid,open=True,text="?",values=(f'{obj}'))
                 else:
-                    tree.insert(parentiid,0,iid=iid,open=True,values=("Unknown",f'{obj}'))
+                    tree.insert(parentiid,0,iid=iid,open=True,text="?",values=(f'{obj}'))
             parentiid=iid
     return parentiid
 
