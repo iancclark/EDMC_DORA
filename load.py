@@ -73,19 +73,20 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         # Useful info:
         #   BodyName, BodyID, Parents[0], SystemAddress, PlanetClass, Atmosphere,
         #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
-        parentid=parental_placeholders(entry['Parents'])
 
         if "PlanetClass" in entry.keys():
             if tree.exists(entry['BodyID']):
                 # update
                 tree.item(entry['BodyID'],text=entry['BodyName'],values=(entry['PlanetClass'],entry['DistanceFromArrivalLS']))
             else:
+                parentid=parental_placeholders(entry['Parents'])
                 tree.insert(parentid,0,iid=entry['BodyID'],open=True,text=entry['BodyName'],values=(entry['PlanetClass'],entry['DistanceFromArrivalLS']))
         elif "StarType" in entry.keys():
             if tree.exists(entry['BodyID']):
                 # update
                 tree.item(entry['BodyID'],text=entry['BodyName'],values=(entry['StarType'],entry['DistanceFromArrivalLS']))
             else:
+                parentid=parental_placeholders(entry['Parents'])
                 tree.insert(parentid,0,iid=entry['BodyID'],open=True,text=entry['BodyName'],values=(entry['StarType'],entry['DistanceFromArrivalLS']))
 
         return None
