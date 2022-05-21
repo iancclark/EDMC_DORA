@@ -3,7 +3,7 @@ import os
 import semantic_version
 from typing import Optional, Dict, Any
 import json
-from threading import Thread
+from threading import Timer
 from time import sleep
 
 import tkinter as tk
@@ -90,14 +90,11 @@ class This:
         self.systeminfo: Dict = {}
         self.systemid: Int = None
         self.datadir=f'{os.path.dirname(__file__)}/data'
-        self.worker: Thread = None
+        self.timer: Timer = None
 
 this = This()
 
 def plugin_start3(plugin_dir: str) -> str:
-    this.worker=Thread(target=worker, name="DORA worker")
-    this.worker.daemon=True
-    this.worker.start()
     return plugin_name
 
 def plugin_app(parent: tk.Frame) -> tk.Frame:
@@ -124,15 +121,16 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         if not this.systeminfo['bodyCount']:
             this.header.config(text='Honk required')
         else:
-            this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys()])}/{this.systeminfo["bodyCount"]} Surface: ?/?')
+
+            this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys() and y["scanType"] != "EDSM"])}/{this.systeminfo["bodyCount"]} Surface: {len([x for x,y in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])}/{len([x for x,y in this.systeminfo["bodyDict"].items() if y["type"]=="Planet"])}')
         # fill tree
         fill_Tree()
         return None
 
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
-        this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys()])}/{this.systeminfo["bodyCount"]} Surface: ?/?')
         this.systeminfo["bodyCount"]=entry["BodyCount"]
+        this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys() and y["scanType"] != "EDSM"])}/{this.systeminfo["bodyCount"]} Surface: {len([x for x,y in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])}/{len([x for x,y in this.systeminfo["bodyDict"].items() if y["type"]=="Planet"])}')
         fill_Tree()
         return None
     # more detailed scan, 
@@ -143,6 +141,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         #   ScanType (Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan)
         body={}
         if "PlanetClass" in entry.keys():
+            body["type"]="Planet"
             for scankey,edsmkey in SCAN_PLANET_TO_EDSMBODY.items():
                 if scankey in entry.keys():
                     body[edsmkey]=entry[scankey]
@@ -154,8 +153,11 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         if not 'bodyDict' in this.systeminfo:
             this.systeminfo['bodyDict']={}
         this.systeminfo['bodyDict'][entry['BodyID']]=body
-
         fill_Tree()
+        if this.timer.is_alive():
+            this.timer.cancel()
+        this.timer=Timer(30,timedsave)
+        this.timer.start()
         return None
     if entry['event'] == "FSSBodySignals":
         # Surface stuff, e.g. bio/vulc.
@@ -183,6 +185,8 @@ def parental_placeholders(parents: list) -> int:
     If we don't already have the parent(s) in the tree we'll add placeholders
     """
     parentiid=0
+    if parents is None:
+        return ''
     # Find out if parent exists. If not, create
     for p in reversed(parents):
         for obj,iid in p.items():
@@ -238,7 +242,7 @@ def draw_UI()->None:
     this.frame.rowconfigure(0,weight=1)
     this.frame.columnconfigure(0,weight=1)
     this.header = ttk.Label(this.frame,wraplength=200,justify="left",text="D O R A - Awaiting initialisation")
-    this.header.grid(row=0,sticky=tk.EW)
+    this.header.grid(row=0,columnspan=2,sticky=tk.EW)
     # #0 is a special case :|
     this.tree = ttk.Treeview(this.frame,
             columns=[colinfo["name"] for colinfo in TREE_COLUMNS],
@@ -250,7 +254,10 @@ def draw_UI()->None:
         this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes")
         this.tree.heading(colinfo["name"],text=colinfo["header"])
 
-    this.tree.grid(row=1,sticky=tk.EW)
+    scrollbar=ttk.Scrollbar(this.frame,orient=tk.VERTICAL, command=this.tree.yview)
+    this.tree.configure(yscroll=scrollbar.set)
+    this.tree.grid(row=1,column=0,sticky=tk.EW)
+    scrollbar.grid(row=1,column=1,sticky=tk.NS)
     theme.update(this.frame)
 
 def fill_Tree()->None:
@@ -267,14 +274,16 @@ def fill_Tree()->None:
                 data.append(body[field])
             else:
                 data.append("")
-        logger.info(f'IID {bodyId} Body {body} Data {data}')
-        this.tree.insert('',tk.END,iid=bodyId,text=body["name"],values=data)
+        parent=parental_placeholders(body['parents'])
+        if this.tree.exists(bodyId):
+            this.tree.item(bodyId,values=data,open=True)
+        else:
+            this.tree.insert(parent,tk.END,iid=bodyId,text=body["name"],values=data,open=True)
+
     return None
 
-def worker()->None:
+def timedsave()->None:
     while not config.shutting_down:
-        logger.info("Sleeping before saving system data")
-        sleep(60)
         if this.systemid is not None:
             save_bodies(this.systemid)
 
