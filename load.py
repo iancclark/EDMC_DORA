@@ -95,12 +95,22 @@ class This:
 this = This()
 
 def plugin_start3(plugin_dir: str) -> str:
+    this.timer=Timer(30,timedsave)
     return plugin_name
 
 def plugin_app(parent: tk.Frame) -> tk.Frame:
     this.frame = tk.Frame(parent)
     draw_UI()
+    #get_bodies(0x0000149c280025a9)
+    #fill_Tree()
     return this.frame
+
+def cmdr_data(data:Dict[str,Any], is_beta: bool)->None:
+    logger.info("Cmdr data")
+    if this.systemid == None and data.get("starsystem") and data.get("systemaddress"):
+        this.systemid=data.get("starsystem").get("systemaddress")
+        get_bodies(this.systemid)
+    return None
 
 def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Dict[str,Any], state: Dict[str, Any]) -> None:
     # Think about using match
@@ -108,7 +118,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         # We have loaded/died/arrived somewhere
         
         # Save any existing data
-        if "bodyDict" in this.systeminfo:
+        if "bodyDict" in this.systeminfo and this.systemid==systeminfo.id64:
             save_bodies(this.systemid)
         this.systemid=entry['SystemAddress']
 
@@ -121,8 +131,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         if not this.systeminfo['bodyCount']:
             this.header.config(text='Honk required')
         else:
-
-            this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys() and y["scanType"] != "EDSM"])}/{this.systeminfo["bodyCount"]} Surface: {len([x for x,y in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])}/{len([x for x,y in this.systeminfo["bodyDict"].items() if y["type"]=="Planet"])}')
+            header_text()
         # fill tree
         fill_Tree()
         return None
@@ -130,7 +139,9 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
         this.systeminfo["bodyCount"]=entry["BodyCount"]
-        this.header.config(text=f'Astro: {len([x for x,y in this.systeminfo["bodyDict"].items() if "name" in y.keys() and y["scanType"] != "EDSM"])}/{this.systeminfo["bodyCount"]} Surface: {len([x for x,y in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])}/{len([x for x,y in this.systeminfo["bodyDict"].items() if y["type"]=="Planet"])}')
+        # What to do if no bodydict...
+        get_bodies(entry['SystemAddress'])
+        header_text()
         fill_Tree()
         return None
     # more detailed scan, 
@@ -139,7 +150,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         #   BodyName, BodyID, Parents, SystemAddress, PlanetClass, Atmosphere,
         #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
         #   ScanType (Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan)
-        body={}
+        body={"scanType":entry["ScanType"]}
         if "PlanetClass" in entry.keys():
             body["type"]="Planet"
             for scankey,edsmkey in SCAN_PLANET_TO_EDSMBODY.items():
@@ -158,6 +169,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
             this.timer.cancel()
         this.timer=Timer(30,timedsave)
         this.timer.start()
+        header_text()
         return None
     if entry['event'] == "FSSBodySignals":
         # Surface stuff, e.g. bio/vulc.
@@ -169,7 +181,14 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
     if entry['event'] == 'SAAScanComplete': 
         # Useful info:
         #  BodyID
-        # Find the bodyid, set "dssScanned: true"
+        # Find the bodyid, set "mapped: true"
+        this.systeminfo["bodyDict"][entry["bodyId"]]["mapped"]=True
+        if this.timer.is_alive():
+            this.timer.cancel()
+        this.timer=Timer(30,timedsave)
+        this.timer.start()
+        header_text()
+        fill_Tree()
         return None
     # centre of gravity of pair
     if entry['event']=='ScanBaryCentre': 
@@ -246,9 +265,19 @@ def draw_UI()->None:
     # #0 is a special case :|
     this.tree = ttk.Treeview(this.frame,
             columns=[colinfo["name"] for colinfo in TREE_COLUMNS],
-            displaycolumns=[colinfo["name"] for colinfo in TREE_COLUMNS if colinfo["show"]])
+            displaycolumns=[colinfo["name"] for colinfo in TREE_COLUMNS if colinfo["show"]],
+            style="dora.Treeview")
     this.tree.column("#0",minwidth=50,width=50,stretch="yes")
     this.tree.heading("#0",text="Body name")
+
+    style=ttk.Style()
+    style.theme_use("default")
+    style.configure('dora.Treeview',font=(None,8),foreground='#ff8800',background='#181818',fieldbackground='#181818')
+    style.configure('dora.Treeview.Heading',foreground='#ff8800',background='#303030')
+    style.configure('Vertical.Scrollbar',arrowcolor='#ff8800',background='#303030',troughcolor='black')
+    this.tree.tag_configure('scanned',font=(None,8,"bold"))
+    this.tree.tag_configure('known',font=(None,8,"italic"))
+    this.tree.tag_configure('mapped',foreground='blue')
 
     for colinfo in TREE_COLUMNS:
         this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes")
@@ -269,16 +298,25 @@ def fill_Tree()->None:
         if "name" not in body:
             continue
         data: list[str]=[] 
+        tags: list[str]=[]
         for field in [colinfo['field'] for colinfo in TREE_COLUMNS]:
             if field in body:
                 data.append(body[field])
             else:
                 data.append("")
         parent=parental_placeholders(body['parents'])
-        if this.tree.exists(bodyId):
-            this.tree.item(bodyId,values=data,open=True)
+        if body.get("mapped"):
+            tags.append("mapped")
         else:
-            this.tree.insert(parent,tk.END,iid=bodyId,text=body["name"],values=data,open=True)
+            tags.append("unmapped")
+        if body.get("scanType") == "EDSM":
+            tags.append("known")
+        else:
+            tags.append("scanned")
+        if this.tree.exists(bodyId):
+            this.tree.item(bodyId,values=data,open=True,tags=tags)
+        else:
+            this.tree.insert(parent,tk.END,iid=bodyId,text=body["name"],values=data,open=True,tags=tags)
 
     return None
 
@@ -287,3 +325,10 @@ def timedsave()->None:
         if this.systemid is not None:
             save_bodies(this.systemid)
 
+def header_text()->None:
+    # check the fields we want to use exist :(
+    total_bodies=this.systeminfo.get("bodyCount")
+    total_planets=len([x for x in this.systeminfo["bodyDict"].items() if x.get("type")=="Planet"])
+    self_scanned=len([x for x in this.systeminfo["bodyDict"].items() if x.get("scanType") != "EDSM"])
+    self_mapped=len([x for x in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])
+    this.header.config(text=f'Astro: {self_scanned}/{total_bodies} Surface: {self_mapped}/{total_planets}')
