@@ -118,7 +118,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         # We have loaded/died/arrived somewhere
         
         # Save any existing data
-        if "bodyDict" in this.systeminfo and this.systemid==systeminfo.id64:
+        if "bodyDict" in this.systeminfo and this.systemid==this.systeminfo.id64:
             save_bodies(this.systemid)
         this.systemid=entry['SystemAddress']
 
@@ -140,6 +140,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         # honk!
         this.systeminfo["bodyCount"]=entry["BodyCount"]
         # What to do if no bodydict...
+        # TODO check body systemaddress against current systemaddress
         get_bodies(entry['SystemAddress'])
         header_text()
         fill_Tree()
@@ -150,6 +151,7 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         #   BodyName, BodyID, Parents, SystemAddress, PlanetClass, Atmosphere,
         #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
         #   ScanType (Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan)
+        # TODO check body systemaddress against current systemaddress
         body={"scanType":entry["ScanType"]}
         if "PlanetClass" in entry.keys():
             body["type"]="Planet"
@@ -271,10 +273,17 @@ def draw_UI()->None:
     this.tree.heading("#0",text="Body name")
 
     style=ttk.Style()
+    # Win32 theme doesn't let us change the appearance much. Some tricks here perhaps:
+    #  https://stackoverflow.com/questions/42708050/tkinter-treeview-heading-styling/42738716#42738716
     style.theme_use("default")
-    style.configure('dora.Treeview',font=(None,8),foreground='#ff8800',background='#181818',fieldbackground='#181818')
+    style.map("dora.Treeview.Heading",
+            background=[('active','#ff8800'),('pressed','!focus','#303030')],
+            foreground=[('active','black'),('pressed','!focus','#ff8800')]
+        )
+    style.configure('dora.Treeview',font=(None,8),foreground='#ff8800',background='#181818',fieldbackground='#181818',)
     style.configure('dora.Treeview.Heading',foreground='#ff8800',background='#303030')
     style.configure('Vertical.Scrollbar',arrowcolor='#ff8800',background='#303030',troughcolor='black')
+    style.configure('TSizegrip',background='black',foreground='#ff8800')
     this.tree.tag_configure('scanned',font=(None,8,"bold"))
     this.tree.tag_configure('known',font=(None,8,"italic"))
     this.tree.tag_configure('mapped',foreground='blue')
@@ -287,6 +296,8 @@ def draw_UI()->None:
     this.tree.configure(yscroll=scrollbar.set)
     this.tree.grid(row=1,column=0,sticky=tk.EW)
     scrollbar.grid(row=1,column=1,sticky=tk.NS)
+    grabber=ttk.Sizegrip(this.frame)
+    grabber.grid(row=2,column=1,sticky=tk.SE)
     theme.update(this.frame)
 
 def fill_Tree()->None:
@@ -328,7 +339,7 @@ def timedsave()->None:
 def header_text()->None:
     # check the fields we want to use exist :(
     total_bodies=this.systeminfo.get("bodyCount")
-    total_planets=len([x for x in this.systeminfo["bodyDict"].items() if x.get("type")=="Planet"])
-    self_scanned=len([x for x in this.systeminfo["bodyDict"].items() if x.get("scanType") != "EDSM"])
-    self_mapped=len([x for x in this.systeminfo["bodyDict"].items() if "mapped" in y.keys()])
+    total_planets=len([k for k,v in this.systeminfo["bodyDict"].items() if v.get("type")=="Planet"])
+    self_scanned=len([k for k,v in this.systeminfo["bodyDict"].items() if v.get("scanType") != "EDSM"])
+    self_mapped=len([k for k,v in this.systeminfo["bodyDict"].items() if "mapped" in v.keys()])
     this.header.config(text=f'Astro: {self_scanned}/{total_bodies} Surface: {self_mapped}/{total_planets}')
