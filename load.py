@@ -14,6 +14,9 @@ from theme import theme
 from config import appname, appversion, config
 import timeout_session
 
+import system
+import edsm
+
 plugin_name=os.path.basename(os.path.dirname(__file__))
 logger=logging.getLogger(f'{appname}.{plugin_name}')
 
@@ -40,10 +43,7 @@ class This:
         self.frame: tk.Frame = None
         self.header: ttk.Label = None
         self.tree: ttk.Treeview = None
-        self.session = timeout_session.new_session()
-        self.systeminfo: Dict = {}
-        self.systemid: Int = None
-        self.datadir=f'{os.path.dirname(__file__)}/data'
+        self.system: system = None
         self.timer: Timer = None
 
 this = This()
@@ -72,82 +72,46 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
         # We have loaded/died/arrived somewhere
         
         # Save any existing data
-        if "bodyDict" in this.systeminfo and this.systemid==this.systeminfo.id64:
-            save_bodies(this.systemid)
-        this.systemid=entry['SystemAddress']
 
-        # Get cached data, fallback to EDSM
-        get_bodies(entry['SystemAddress'])
+        # Get cached data, fallback to EDSM?
 
         # clear tree 
         for item in this.tree.get_children():
             this.tree.delete(item)
-        if not this.systeminfo['bodyCount']:
-            this.header.config(text='Honk required')
-        else:
-            header_text()
         # fill tree
+        fill_Header()
         fill_Tree()
         return None
 
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
-        this.systeminfo["bodyCount"]=entry["BodyCount"]
-        # What to do if no bodydict...
-        # TODO check body systemaddress against current systemaddress
-        get_bodies(entry['SystemAddress'])
+        this.system.system_from_fsshonk(entry)
         header_text()
         fill_Tree()
         return None
     # more detailed scan, 
     if entry['event'] == 'Scan':
-        # Useful info:
-        #   BodyName, BodyID, Parents, SystemAddress, PlanetClass, Atmosphere,
-        #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
-        #   ScanType (Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan)
-        # TODO check body systemaddress against current systemaddress
-        body={"scanType":entry["ScanType"]}
-        if "PlanetClass" in entry.keys():
-            body["type"]="Planet"
-            for scankey,edsmkey in SCAN_PLANET_TO_EDSMBODY.items():
-                if scankey in entry.keys():
-                    body[edsmkey]=entry[scankey]
-        elif "StarType" in entry.keys():
-            for scankey,edsmkey in SCAN_STAR_TO_EDSMBODY.items():
-                if scankey in entry.keys():
-                    body[edsmkey]=entry[scankey]
-        # find item in list
-        if not 'bodyDict' in this.systeminfo:
-            this.systeminfo['bodyDict']={}
-        this.systeminfo['bodyDict'][entry['BodyID']]=body
-        fill_Tree()
-        if this.timer.is_alive():
-            this.timer.cancel()
-        this.timer=Timer(30,timedsave)
-        this.timer.start()
+        this.system.body_from_scan(entry)
         header_text()
+        fill_Tree()
         return None
     if entry['event'] == "FSSBodySignals":
         # Surface stuff, e.g. bio/vulc.
         # Useful info:
         # [ "Type":"$SAA_SignalType_{x}", "Count":{y} ]
         # Biological, Geological
+        this.system.body_from_fsssignal(entry)
+        header_text()
+        fill_Tree()
         return None
     # DSS done
     if entry['event'] == 'SAAScanComplete': 
         # Useful info:
         #  BodyID
         # Find the bodyid, set "mapped: true"
-        this.systeminfo["bodyDict"][entry["bodyId"]]["mapped"]=True
-        if this.timer.is_alive():
-            this.timer.cancel()
-        this.timer=Timer(30,timedsave)
-        this.timer.start()
+        this.system.body_from_dssscan(entry)
         header_text()
         fill_Tree()
-        return None
-    # centre of gravity of pair
-    if entry['event']=='ScanBaryCentre': 
         return None
     return None
 
