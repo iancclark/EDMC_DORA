@@ -17,52 +17,6 @@ import timeout_session
 plugin_name=os.path.basename(os.path.dirname(__file__))
 logger=logging.getLogger(f'{appname}.{plugin_name}')
 
-SCAN_STAR_TO_EDSMBODY={
-        "BodyName":"name",
-        "BodyID":"bodyId",
-        "Parents":"parents",
-        "DistanceFromArrivalLS":"distanceToArrival", 
-        "StarType":"subType", # rough match
-        "Subclass":"spectralClass", # very rough match
-        "StellarMass":"solarMasses",
-        "Radius":"solarRadius", # units wrong
-        "AbsoluteMagnitude":"absoluteMagnitude",
-        "Age_MY":"age",
-        "SurfaceTemperature":"surfaceTemperature",
-        "Luminosity":"luminosity",
-        "SemiMajorAxis":"semiMajorAxis",
-        "Eccentricity":"orbitalEccentricity",
-        "OrbitalInclination":"orbitalInclination",
-        "Periapsis":"argOfPeriapsis",
-        "OrbitalPeriod":"orbitalPeriod",
-        "RotationalPeriod":"rotationalPeriod", # units wrong
-        "AxialTilt":"axialTilt"
-        }
-SCAN_PLANET_TO_EDSMBODY={
-        "BodyName":"name",
-        "BodyID":"bodyId",
-        "Parents":"parents",
-        "DistanceFromArrivalLS":"distanceToArrival",
-        "TidalLock":"rotationalPeriodTidallyLocked",
-        "TerraformState":"terraformingState",
-        "PlanetClass":"subType", # rough match
-        "AtmosphereType":"atmosphereType", # rough match
-        "AtmosphereComposition":"atmosphereComposition", # rough match
-        "Volcanism":"volcanismType",
-        "MassEM":"earthMasses",
-        "Radius":"radius", # units wrong
-        "SurfaceGravity":"gravity",
-        "SurfaceTemperature":"surfaceTemperature",
-        "SurfacePressure":"surfacePressure",
-        "Landable":"isLandable",
-        "Composition":"solidComposition",
-        "SemiMajorAxis":"semiMajorAxis",
-        "Eccentricity":"orbitalEccentricity",
-        "OrbitalInclination":"orbitalInclination",
-        "OrbitalPeriod":"orbitalPeriod",
-        "RotationalPeriod":"rotationalPeriod", # units wrong
-        "AxialTilt":"axialTilt"
-        }
 TREE_COLUMNS=[
         {"name":"class","header":"Class","field":"subType","show":True,"width":20},
         {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20},
