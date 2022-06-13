@@ -20,12 +20,12 @@ plugin_name=os.path.basename(os.path.dirname(__file__))
 logger=logging.getLogger(f'{appname}.{plugin_name}')
 
 TREE_COLUMNS=[
-        {"name":"class","header":"Class","field":"subType","show":True,"width":20},
-        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20},
-        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20},
-        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20},
-        {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20},
-        {"name":"land","header":"Land","field":"isLandable","show":True,"width":5}]
+        {"name":"class","header":"Class","field":"subType","show":True,"width":20, "anchor":tk.W,"format":"{}"},
+        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20,"anchor":tk.E,"format":"{}"},
+        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20,"anchor":tk.E,"format":"{:.2f}"},
+        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20,"anchor":tk.E,"format":"{}K"},
+        {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20,"anchor":tk.W,"format":"{}"},
+        {"name":"land","header":"Actions","field":"actions","show":True,"width":5,"anchor":tk.W,"format":"{}"}]
 
 if not logger.hasHandlers():
     level = logging.INFO
@@ -84,18 +84,20 @@ def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Di
     # more detailed scan, 
     if entry['event'] == 'Scan':
         logger.info(f'Scan({entry["ScanType"]}) : {entry["SystemAddress"]}')
-        this.system.body_from_scan(entry)
+        this.system.scan(entry)
         dora_status()
         fill_Tree()
         return None
     if entry['event'] == "FSSBodySignals":
-        this.system.body_from_fsssignal(entry)
+        logger.info(f'BodySignals: {entry["SystemAddress"]}')
+        this.system.fsssignal(entry)
         dora_status()
         fill_Tree()
         return None
     # DSS done
     if entry['event'] == 'SAAScanComplete': 
-        this.system.body_from_dssscan(entry)
+        logger.info(f'SurfaceScanComplete: {entry["SystemAddress"]}')
+        this.system.dssscan(entry)
         dora_status()
         fill_Tree()
         return None
@@ -129,10 +131,11 @@ def draw_UI()->None:
     style.configure('TSizegrip',background='black',foreground='#ff8800')
     this.tree.tag_configure('scanned',font=(None,8,"bold"))
     this.tree.tag_configure('known',font=(None,8,"italic"))
-    this.tree.tag_configure('mapped',foreground='blue')
+    this.tree.tag_configure('mapped',foreground='cyan')
+    this.tree.tag_configure('selfmapped',foreground='blue')
 
     for colinfo in TREE_COLUMNS:
-        this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes")
+        this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes",anchor=colinfo["anchor"])
         this.tree.heading(colinfo["name"],text=colinfo["header"])
 
     scrollbar=ttk.Scrollbar(this.frame,orient=tk.VERTICAL, command=this.tree.yview)
@@ -151,14 +154,21 @@ def fill_Tree()->None:
     for body in this.system.knownbodies():
         if "name" not in body:
             continue
+        if body['type']!="Star":
+            shortname=body["name"].replace(this.system.systemname()+" ","")
+        else:
+            shortname=body["name"]
         data: list[str]=[] 
         tags: list[str]=[]
-        for field in [colinfo['field'] for colinfo in TREE_COLUMNS]:
+        for field,fmt in [(colinfo['field'],colinfo['format']) for colinfo in TREE_COLUMNS]:
             if field in body:
-                data.append(body[field])
+                data.append(fmt.format(body[field]))
             else:
                 data.append("")
-        if body.get("mapped"):
+        # TODO self mapped vs other mapped
+        if body.get("mapped")=="self":
+            tags.append("selfmapped")
+        elif body.get("mapped")==True:
             tags.append("mapped")
         else:
             tags.append("unmapped")
@@ -170,9 +180,9 @@ def fill_Tree()->None:
             this.tree.item(body['bodyId'],values=data,open=True,tags=tags)
         else:
             if this.tree.exists(body['parentId']):
-                this.tree.insert(body["parentId"],tk.END,iid=body["bodyId"],text=body["name"],values=data,open=True,tags=tags)
+                this.tree.insert(body["parentId"],tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
             else:
-                this.tree.insert('',tk.END,iid=body["bodyId"],text=body["name"],values=data,open=True,tags=tags)
+                this.tree.insert('',tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
 
     return None
 
@@ -183,5 +193,12 @@ def fill_Tree()->None:
 
 def dora_status()->None:
     # check the fields we want to use exist :(
-    # total_bodies, total_planets, self_scanned, self_mapped
+    # bodies, planets, scanned, mapped
+
+    bodies=this.system.getBodyCount()
+    kb=this.system.knownbodies() 
+    scanned=len([x for x in kb if x['type'] in ('Planet','Star') and x['scanType']!="EDSM"])
+    mapped=len([x for x in kb if x['type'] == 'Planet' and x.get('mapped')=='self'])
+    planets=len([x for x in kb if x['type']=="Planet"])
+    this.status.config(text=f'{scanned}/{bodies} {mapped}/{planets}')
     return

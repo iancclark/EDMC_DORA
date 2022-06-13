@@ -1,3 +1,9 @@
+import logging
+import os
+from config import appname
+
+plugin_name=os.path.basename(os.path.dirname(__file__))
+logger=logging.getLogger(f'{appname}.{plugin_name}')
 
 def scan_to_body(scan:dict,body:dict) -> dict:
     # take a scan, return updated body
@@ -7,25 +13,38 @@ def scan_to_body(scan:dict,body:dict) -> dict:
         if scan.get(jnl):
             body[sys]=scan.get(jnl)
     # determine type
-    if scan.get("StarType"):
-        body["type"]="star"
+    if scan.get("StarType") in SCAN_STARTYPES:
+        body["type"]="Star"
         # map journal name to short name
         body["subType"]=SCAN_STARTYPES[scan.get("StarType")]
-        # infer scoopability?
-    elif scan.get("PlanetClass"):
-        body["type"]="planet"
+    elif scan.get("StarType"):
+        body["type"]="Star"
+        logger.info(f"Unknown StarType: {scan['StarType']}")
+    elif scan.get("PlanetClass") in SCAN_PLANETTYPES:
+        body["type"]="Planet"
         body["subType"]=SCAN_PLANETTYPES[scan.get("PlanetClass")]
+    elif scan.get("PlanetClass"):
+        body["type"]="Planet"
+        logger.info(f"Unknown PlanetClass: {scan['PlanetClass']}")
     else:
-        body["type"]="null"
+        body["type"]="Null"
     if scan.get("AtmosphereType"):
         body["atmosphereType"]=SCAN_ATMOTYPES[scan.get("AtmosphereType")]
-    if scan.get("Volcanism"):
+    elif scan.get("AtmosphereType"):
+        logger.info(f"Unknown AtmosphereType type: {scan['AtmosphereType']}")
+    if scan.get("Volcanism") in SCAN_VOLCANISM:
         body["volcanism"]=SCAN_VOLCANISM[scan.get("Volcanism")]
+    elif scan.get("Volcanism"):
+        logger.info(f"Unknown volcanism type: {scan['Volcanism']}")
     if scan.get("SurfaceGravity"):
         body["gravity"]=scan.get("SurfaceGravity")/SCAN_G
     if scan.get("SurfacePressure"):
         # Convert from millibar 
         body["surfacePressure"]=scan.get("SurfacePressure")*SCAN_MBAR_TO_ATM
+    if scan.get('StarType') and scan.get('StarType').startswith(('O','B','A','F','G','K','M')):
+        body['actions']="Scoop"
+    elif scan.get("Landable") == True:
+        body['actions']="Land"
     return body
 
 def bodysignals(fsssignals:dict,body:dict) -> dict:
@@ -133,11 +152,11 @@ SCAN_PLANETTYPES={
         "Ammonia world":"AW",
         "Gas giant with water-based life":"GG WL",
         "Gas giant with ammonia-based life":"GG AL",
-        "Sudarsky Class I gas giant":"GG I",
-        "Sudarsky Class II gas giant":"GG II",
-        "Sudarsky Class III gas giant":"GG III",
-        "Sudarsky Class IV gas giant":"GG IV",
-        "Sudarsky Class V gas giant":"GG V",
+        "Sudarsky class I gas giant":"GG I",
+        "Sudarsky class II gas giant":"GG II",
+        "Sudarsky class III gas giant":"GG III",
+        "Sudarsky class IV gas giant":"GG IV",
+        "Sudarsky class V gas giant":"GG V",
         "Helium rich gas giant":"He G",
         "Helium gas giant":"GG He"
  }
@@ -148,14 +167,14 @@ SCAN_ATMOTYPES={
         "Water":"H\u2082O",
         "CarbonDioxide":"CO\u2082",
         "SulphurDioxide":"SO\u2082",
-        "Nitrogen":"N",
+        "Nitrogen":"N\u2082",
         "WaterRich":"H\u2082O*",
         "MethaneRich":"CH\u2084*",
         "AmmoniaRich":"NH\u2083*",
         "CarbonDioxideRich":"CO\u2082*",
         "Methane":"CH\u2084",
         "Helium":"He",
-        "SilicateVapour":"Si",
+        "SilicateVapour":"SiO\u2093",
         "MetallicVapour":"Me",
         "NeonRich":"Ne*",
         "ArgonRich":"Ar*",
@@ -163,4 +182,21 @@ SCAN_ATMOTYPES={
         "Argon":"Ar",
         "Oxygen":"O",
         "NitrogenRich":"N*"
+        }
+
+SCAN_VOLCANISM={
+        "Water Magma":"H\u2082O \u0394",
+        "Sulphur Dioxide Magma":"SO\u2082 \u0394"
+        "Ammonia Magma":"NH\u2083 \u0394",
+        "Methane Magma":"CH\u2084 \u0394",
+        "Nitrogen Magma":"N\u2082 \u0394",
+        "Silicate Magma":"SiO\u2093 \u0394",
+        "Metallic Magma":"Me \u0394",
+        "Water Geysers":"H\u2082O \u0373",
+        "Carbon Dioxide Geysers":"CO\u2082 \u0373",
+        "Ammonia Geysers":"NH\u2083 \u0373",
+        "Methane Geysers":"CH\u2084 \u0373",
+        "Nitrogen Geysers":"N\u2082 \u0373",
+        "Helium Geysers":"He \u0373",
+        "Silicate Vapour Geysers":"SiO\u2093 \u0373",
         }

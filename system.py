@@ -25,7 +25,7 @@ class System:
         self.systemAddress: int = 0
         self.systemName: str = ""
         self.bodyCount: int = 0
-        self.bodies: SparseList = []
+        self.bodies= SparseList()
         self.datadir=f'{os.path.dirname(__file__)}/data'
         return None
 
@@ -57,13 +57,21 @@ class System:
         with open(savefile,'w') as f:
             json.dump(self.__dict__,f)
 
-    def body_from_scan(self,data):
-        if(data.get("systemAddress") != self.systemAddress):
+    def scan(self,data):
+        if self.systemAddress==0:
+            self.systemAddress=data.get("SystemAddress")
+            self.systemName=data['StarSystem']
+            # Try to restore from a save file
+            try:
+                self.from_file(data['SystemAddress'])
+            except FileNotFoundError:
+                # presumably the file is missing, try EDSM
+                self.from_edsm(data['SystemAddress'])
+        if(data.get("SystemAddress") != self.systemAddress):
             raise Exception(f'Received a scan for a different system')
         # create body by bodyid if necessary
-        if self.bodies.get('BodyID'):
-            body=self.bodies.get('BodyID')
-        else:
+        body=self.bodies[data['BodyID']]
+        if body==None:
             body={"bodyId":data['BodyID']}
         # call scan_to_body from journalscan.py
         body=journalscan.scan_to_body(data,body)
@@ -71,7 +79,7 @@ class System:
         self._child_to_parents(body)
         return
 
-    def body_from_fsssignals(self,data):
+    def fsssignals(self,data):
         # find the appropriate body, pass onto journalscan.py bodysignals
         if self.bodies.get('BodyID'):
             body=self.bodies.get('BodyID')
@@ -99,19 +107,34 @@ class System:
         return
 
     def fsshonk(self,data):
-        if(data.get("systemAddress") != self.systemAddress):
+        if self.systemAddress==0:
+            self.systemAddress=data.get("SystemAddress")
+            self.systemName=data['StarSystem']
+            # Try to restore from a save file
+            try:
+                self.from_file(data['SystemAddress'])
+            except FileNotFoundError:
+                # presumably the file is missing, try EDSM
+                self.from_edsm(data['SystemAddress'])
+        if data.get("SystemAddress") != self.systemAddress:
             raise Exception(f'Received a scan for a different system')
         # As above, fill in bodyCount
         self.bodyCount=data['BodyCount']
         return
 
-    def body_from_dssscan(self,data):
+    def dssscan(self,data):
         # get body id, set to mapped
-        self.bodies[data['BodyID']]["mapped"]=True
+        self.bodies[data['BodyID']]["mapped"]='self'
         return
 
     def knownbodies(self)->list:
         return [body for body in self.bodies if body != None ]
+
+    def systemname(self)->str:
+        return self.systemName
+
+    def getBodyCount(self)->int:
+        return self.bodyCount
 
     def rotate(self)->None:
         # save data
@@ -121,7 +144,7 @@ class System:
         self.systemAddress: int = 0
         self.systemName: str = ""
         self.bodyCount: int = 0
-        self.bodies: SparseList = []
+        self.bodies=SparseList()
 
     def _filepath(self,systemAddress:int):
         filename=f'{systemAddress:016x}.json'

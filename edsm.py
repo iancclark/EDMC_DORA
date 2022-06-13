@@ -1,9 +1,13 @@
 import json
 import logging
-import SparseList
+import os
+from SparseList import SparseList
 import timeout_session
 from typing import Optional, Dict, Any
+from config import appname
 
+plugin_name=os.path.basename(os.path.dirname(__file__))
+logger=logging.getLogger(f'{appname}.{plugin_name}')
 
 def getsystem(systemAddress:int) -> (SparseList,int):
     session=timeout_session.new_session()
@@ -14,24 +18,30 @@ def getsystem(systemAddress:int) -> (SparseList,int):
     if edsm['id64'] != systemAddress:
         raise Exception("EDSM didn't give us the system we asked for")
 
-    bodies=SparseList.SparseList()
+    bodies=SparseList()
     for body in edsm.get("bodies"):
         body['discovered']=True
         if 'solarRadius' in body.keys():
             body['radius']=body['solarRadius']*EDSM_SOLARRADIUS
         elif 'radius' in body.keys():
             body['radius']=body['radius']*1000
-        if body.get('atmosphereType') in EDSM_ATMOTYPES:
-            body['atmosphereType']=EDSM_ATMOTYPES[body['atmosphereType']]
         if body.get('subType') in EDSM_SUBTYPES:
             body['subType']=EDSM_SUBTYPES[body['subType']]
+        elif boty.get('subType'):
+            logger.info(f'Unknown subtype: {body["subType"]}')
         # might have to trim off hot/cold thick/thin here
         if body.get('atmosphereType'):
             body['atmosphereType']=body['atmosphereType'].replace("Thick ","").replace("Thin ","").replace("Hot ","")
         if body.get('atmosphereType') in EDSM_ATMOTYPES:
             body['atmosphereType']=EDSM_ATMOTYPES[body['atmosphereType']]
+        elif body.get('atmosphereType'):
+            logger.info(f'Unknown atmosphere type: {body["atmosphereType"]}')
         if 'belt' in body.keys():
             body['rings']=body.pop('belt')
+        if body.get('isScoopable')==True:
+            body['actions']="Scoop"
+        elif body.get('isLandable')==True:
+            body['actions']="Land"
         body['discovered']=True # If it's in EDSM...
         body['scanType']="EDSM"
         body['systemAddress']=edsm['id64']
@@ -109,14 +119,14 @@ EDSM_ATMOTYPES={
         "Water":"H\u2082O",
         "Carbon dioxide":"CO\u2082",
         "Sulphur dioxide":"SO\u2082",
-        "Nitrogen":"N",
+        "Nitrogen":"N\u2082",
         "Water-rich":"H\u2082O*",
         "Methane-rich":"CH\u2084*",
         "Ammonia-rich":"NH\u2083*",
         "Carbon dioxide-rich":"CO\u2082*",
         "Methane":"CH\u2084",
         "Helium":"He",
-        "Silicate vapour":"Si",
+        "Silicate vapour":"Si\u2093",
         "Metallic vapour":"Me",
         "Neon-rich":"Ne*",
         "Argon-rich":"Ar*",

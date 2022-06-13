@@ -44,5 +44,6 @@ Landable                isLandable                      isLandable              
 Composition{}           solidComposition{}              solidComposition        Rename needed from journal
 -			-				bioSignals		From FSSBodySignals
 -			-				geoSignals		From FSSBodySignals
+-			-				actions			Infer from isLandable/isScoopable and journal equivs
 
 Detailed and Orbital Reconaissance Assistant
