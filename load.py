@@ -21,9 +21,9 @@ logger=logging.getLogger(f'{appname}.{plugin_name}')
 
 TREE_COLUMNS=[
         {"name":"class","header":"Class","field":"subType","show":True,"width":20, "anchor":tk.W,"format":"{}"},
-        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20,"anchor":tk.E,"format":"{}"},
+        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}LS"},
         {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20,"anchor":tk.E,"format":"{:.2f}"},
-        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20,"anchor":tk.E,"format":"{}K"},
+        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}K"},
         {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20,"anchor":tk.W,"format":"{}"},
         {"name":"land","header":"Actions","field":"actions","show":True,"width":5,"anchor":tk.W,"format":"{}"}]
 
@@ -200,5 +200,5 @@ def dora_status()->None:
     scanned=len([x for x in kb if x['type'] in ('Planet','Star') and x['scanType']!="EDSM"])
     mapped=len([x for x in kb if x['type'] == 'Planet' and x.get('mapped')=='self'])
     planets=len([x for x in kb if x['type']=="Planet"])
-    this.status.config(text=f'{scanned}/{bodies} {mapped}/{planets}')
+    this.status.config(text=f'DORA: Scanned: {scanned}/{bodies} Mapped: {mapped}/{planets}')
     return
