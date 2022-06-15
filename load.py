@@ -4,7 +4,6 @@ import semantic_version
 from typing import Optional, Dict, Any
 import json
 from threading import Timer
-from time import sleep
 
 import tkinter as tk
 from tkinter import ttk
@@ -22,10 +21,13 @@ logger=logging.getLogger(f'{appname}.{plugin_name}')
 TREE_COLUMNS=[
         {"name":"class","header":"Class","field":"subType","show":True,"width":20, "anchor":tk.W,"format":"{}"},
         {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}LS"},
-        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20,"anchor":tk.E,"format":"{:.2f}"},
+        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20,"anchor":tk.E,"format":"{:.2f}g"},
         {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}K"},
         {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20,"anchor":tk.W,"format":"{}"},
-        {"name":"land","header":"Actions","field":"actions","show":True,"width":5,"anchor":tk.W,"format":"{}"}]
+        {"name":"land","header":"Actions","field":"actions","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        {"name":"geoSignals","header":"Geo","field":"geoSignals","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        {"name":"bioSignals","header":"Bio","field":"bioSignals","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        ]
 
 if not logger.hasHandlers():
     level = logging.INFO
@@ -43,18 +45,21 @@ class This:
         self.status: ttk.Label = None
         self.tree: ttk.Treeview = None
         self.system: system = None
-        self.timer: Timer = None
+        self.timer=None
 
 this = This()
 
 def plugin_start3(plugin_dir: str) -> str:
-    #this.timer=Timer(30,timedsave)
     return plugin_name
 
 def plugin_app(parent: tk.Frame) -> tk.Frame:
     this.frame = tk.Frame(parent)
     this.system = system.System()
     draw_UI()
+    this.tree.bind_all('<<DORARefresh>>', refresh())
+    #fill_Tree()
+    #dora_status()
+    delayed_update()
     return this.frame
 
 def cmdr_data(data:Dict[str,Any], is_beta: bool)->None:
@@ -64,42 +69,51 @@ def cmdr_data(data:Dict[str,Any], is_beta: bool)->None:
     #    return None
     return None
 
+def plugin_stop()->None:
+    # perhaps save?
+    this.system.shut()
+    return
+
 def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Dict[str,Any], state: Dict[str, Any]) -> None:
     # Think about using match
     if entry['event'] in ('FSDJump','CarrierJump','Location'):
         logger.info(f'FSDJump or similar: {entry["SystemAddress"]}')
         this.system.fsdjump(entry)
         # fill tree
-        dora_status()
-        fill_Tree()
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
 
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
         this.system.fsshonk(entry)
-        dora_status()
-        fill_Tree()
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
 
     # more detailed scan, 
     if entry['event'] == 'Scan':
         logger.info(f'Scan({entry["ScanType"]}) : {entry["SystemAddress"]}')
         this.system.scan(entry)
-        dora_status()
-        fill_Tree()
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
     if entry['event'] == "FSSBodySignals":
         logger.info(f'BodySignals: {entry["SystemAddress"]}')
-        this.system.fsssignal(entry)
+        this.system.fsssignals(entry)
         dora_status()
-        fill_Tree()
         return None
     # DSS done
     if entry['event'] == 'SAAScanComplete': 
         logger.info(f'SurfaceScanComplete: {entry["SystemAddress"]}')
         this.system.dssscan(entry)
-        dora_status()
-        fill_Tree()
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
+        this.tree.see(entry['BodyID'])
         return None
     return None
 
@@ -116,6 +130,8 @@ def draw_UI()->None:
             style="dora.Treeview")
     this.tree.column("#0",minwidth=50,width=50,stretch="yes")
     this.tree.heading("#0",text="Body name")
+
+    this.tree.bind("<Double-1>", treeDblClick)
 
     style=ttk.Style()
     # Win32 theme doesn't let us change the appearance much. Some tricks here perhaps:
@@ -152,12 +168,21 @@ def fill_Tree()->None:
     for item in this.tree.get_children():
         this.tree.delete(item)
     for body in this.system.knownbodies():
-        if "name" not in body:
-            continue
-        if body['type']!="Star":
+        openitem=True
+        if body['type']=="Planet":
             shortname=body["name"].replace(this.system.systemname()+" ","")
-        else:
+        elif body.get("type") == "Null":
+            if body.get("name"):
+                shortname=body['name'].replace(this.system.systemname()+" ","")
+            else:
+                shortname="\u047a"
+        elif body.get("type")=="Ring":
+            shortname="\u25cc"
+            openitem=False
+        elif body.get("name"):
             shortname=body["name"]
+        else:
+            logger.warn(f"Missing name for {body}")
         data: list[str]=[] 
         tags: list[str]=[]
         for field,fmt in [(colinfo['field'],colinfo['format']) for colinfo in TREE_COLUMNS]:
@@ -165,31 +190,25 @@ def fill_Tree()->None:
                 data.append(fmt.format(body[field]))
             else:
                 data.append("")
-        # TODO self mapped vs other mapped
+
         if body.get("mapped")=="self":
             tags.append("selfmapped")
-        elif body.get("mapped")==True:
+        elif body.get("mapped")=="other":
             tags.append("mapped")
-        else:
-            tags.append("unmapped")
+
         if body.get("scanType") == "EDSM":
             tags.append("known")
         else:
             tags.append("scanned")
         if this.tree.exists(body['bodyId']):
-            this.tree.item(body['bodyId'],values=data,open=True,tags=tags)
+            this.tree.item(body['bodyId'],values=data,open=openitem,tags=tags)
         else:
             if this.tree.exists(body['parentId']):
-                this.tree.insert(body["parentId"],tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
+                this.tree.insert(body["parentId"],tk.END,iid=body["bodyId"],text=shortname,values=data,open=openitem,tags=tags)
             else:
                 this.tree.insert('',tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
 
     return None
-
-#def timedsave()->None:
-    #while not config.shutting_down:
-        #if this.systemid is not None:
-            #save_bodies(this.systemid)
 
 def dora_status()->None:
     # check the fields we want to use exist :(
@@ -202,3 +221,27 @@ def dora_status()->None:
     planets=len([x for x in kb if x['type']=="Planet"])
     this.status.config(text=f'DORA: Scanned: {scanned}/{bodies} Mapped: {mapped}/{planets}')
     return
+
+def treeDblClick(event):
+    item=this.tree.identify('item',event.x,event.y)
+    if item!='':
+        logger.info(f"DoubleClicked bodyId {item}")
+        idx=int(item)
+        logger.info(f"Details: {this.system.bodies[idx]}")
+
+def tick():
+    # trigger save
+    # trigger UI redraw
+    this.tree.event_generate('<<DORARefresh>>')
+    logger.info("Ticked")
+
+def delayed_update():
+    if this.timer!=None and this.timer.is_alive():
+        this.timer.stop()
+    else:
+        this.timer=Timer(15,tick)
+    this.timer.start()
+
+def refresh():
+    fill_Tree()
+    dora_status()

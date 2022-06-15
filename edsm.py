@@ -45,6 +45,7 @@ def getsystem(systemAddress:int) -> (SparseList,int):
         body['discovered']=True # If it's in EDSM...
         body['scanType']="EDSM"
         body['systemAddress']=edsm['id64']
+        body['mapped']="unknown"
         bodies[body['bodyId']]=body
     return (bodies,edsm['bodyCount'])
 

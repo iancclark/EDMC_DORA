@@ -27,6 +27,10 @@ class System:
         self.bodyCount: int = 0
         self.bodies= SparseList()
         self.datadir=f'{os.path.dirname(__file__)}/data'
+        self.saved=True
+        with open(f'{self.datadir}/lastsystem','r') as f:
+            self.systemAddress=int(f.read())
+            self.from_file(self.systemAddress)
         return None
 
     def from_edsm(self,systemAddress:int):
@@ -38,6 +42,7 @@ class System:
         for body in self.bodies:
             if body != None:
                 self._child_to_parents(body)
+        self.saved=False
         return
 
     def from_file(self,systemAddress:int):
@@ -45,9 +50,13 @@ class System:
             raise Exception("Asked to load data from file when I have some data")
         with open(self._filepath(systemAddress),'r') as f:
             self.__dict__=json.load(f)
+        self.saved=True
+        self.datadir=f'{os.path.dirname(__file__)}/data'
         return
 
     def to_file(self,systemAddress:int):
+        if self.saved:
+            return
         if self.systemAddress != systemAddress:
             raise Exception(f'Asked to save {systemAddress}, think we know about {self.systemAddress}')
         # make the dir
@@ -55,9 +64,11 @@ class System:
 
         os.makedirs(os.path.dirname(savefile),exist_ok=True)
         with open(savefile,'w') as f:
-            json.dump(self.__dict__,f)
+            json.dump({k:v for k,v in self.__dict__.items() if k not in ('timer','datadir','saved')},f)
+        self.saved=True
 
     def scan(self,data):
+        self.saved=False
         if self.systemAddress==0:
             self.systemAddress=data.get("SystemAddress")
             self.systemName=data['StarSystem']
@@ -80,12 +91,12 @@ class System:
         return
 
     def fsssignals(self,data):
+        self.saved=False
         # find the appropriate body, pass onto journalscan.py bodysignals
-        if self.bodies.get('BodyID'):
-            body=self.bodies.get('BodyID')
-        else:
+        body=self.bodies[data['BodyID']]
+        if body==None:
             body={"bodyId":data['BodyID']}
-        body=journalscan.bodysignals(data,body)
+        body=journalscan.bodysignals(data.get('Signals'),body)
         self.bodies[data['BodyID']]=body
         return
 
@@ -96,10 +107,12 @@ class System:
             self.rotate()
             self.systemAddress=data['SystemAddress']
             self.systemName=data['StarSystem']
+            self.saved=False
 
         # Try to restore from a save file
         try:
             self.from_file(data['SystemAddress'])
+            self.saved=True
         except FileNotFoundError:
             # presumably the file is missing, try EDSM
             self.from_edsm(data['SystemAddress'])
@@ -109,7 +122,7 @@ class System:
     def fsshonk(self,data):
         if self.systemAddress==0:
             self.systemAddress=data.get("SystemAddress")
-            self.systemName=data['StarSystem']
+            self.systemName=data['SystemName']
             # Try to restore from a save file
             try:
                 self.from_file(data['SystemAddress'])
@@ -125,6 +138,7 @@ class System:
     def dssscan(self,data):
         # get body id, set to mapped
         self.bodies[data['BodyID']]["mapped"]='self'
+        self.saved=False
         return
 
     def knownbodies(self)->list:
@@ -148,7 +162,7 @@ class System:
 
     def _filepath(self,systemAddress:int):
         filename=f'{systemAddress:016x}.json'
-        return f'{self.datadir}/{filename[0:2]}/{filename[3:5]}/{filename}'
+        return f'{self.datadir}/{filename[0:4]}/{filename[4:8]}/{filename}'
 
     def _child_to_parents(self,body) -> None:
         """
@@ -162,15 +176,21 @@ class System:
             childId=body['bodyId']
             for parent in body['parents']:
                 for bodytype,parentId in parent.items():
+                    self.bodies[childId]['parentId']=parentId
                     if self.bodies[parentId]!=None:
                         if self.bodies[parentId].get("children"):
                             self.bodies[parentId]["children"].append(childId)
                         else:
                             self.bodies[parentId]["children"]=list([childId])
                     else:
-                        self.bodies[parentId]={"type":bodytype,"children":list([childId])}
-                    self.bodies[childId]["parentId"]=parentId
+                        self.bodies[parentId]={"type":bodytype,"bodyId":parentId,"children":list([childId])}
                     childId=parentId
         else:
             self.bodies[body['bodyId']]['parentId']=0
-        return
+        return  
+
+    def shut(self):
+        if self.systemAddress != 0:
+            self.to_file(self.systemAddress);
+            with open(f'{self.data}/lastsystem','w') as f:
+                f.write(str(self.systemAddress))

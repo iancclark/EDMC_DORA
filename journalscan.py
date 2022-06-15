@@ -33,7 +33,7 @@ def scan_to_body(scan:dict,body:dict) -> dict:
     elif scan.get("AtmosphereType"):
         logger.info(f"Unknown AtmosphereType type: {scan['AtmosphereType']}")
     if scan.get("Volcanism") in SCAN_VOLCANISM:
-        body["volcanism"]=SCAN_VOLCANISM[scan.get("Volcanism")]
+        body["volcanism"]=SCAN_VOLCANISM[scan.get("Volcanism").replace(('Major','Minor','Volcanism'),('','',''))]
     elif scan.get("Volcanism"):
         logger.info(f"Unknown volcanism type: {scan['Volcanism']}")
     if scan.get("SurfaceGravity"):
@@ -45,9 +45,11 @@ def scan_to_body(scan:dict,body:dict) -> dict:
         body['actions']="Scoop"
     elif scan.get("Landable") == True:
         body['actions']="Land"
+    if scan.get("WasMapped") == True and not body.get("mapped"):
+        body['mapped']="other"
     return body
 
-def bodysignals(fsssignals:dict,body:dict) -> dict:
+def bodysignals(fsssignals:list,body:dict) -> dict:
     # update a body with signal info
     for signal in fsssignals:
         if signal.get("Type") == "$SAA_SignalType_Biological;":
@@ -73,7 +75,6 @@ SCAN_RENAMES={
         "RotationPeriod":"rotationalPeriod",
         "Rings":"rings",
         "WasDiscovered":"discovered",
-        "WasMapped":"mapped",
         "AxialTilt":"axialTilt",
         "StellarMass":"solarMasses",
         "Radius":"radius",
@@ -150,8 +151,8 @@ SCAN_PLANETTYPES={
         "Water world":"WW",
         "Water giant":"WG",
         "Ammonia world":"AW",
-        "Gas giant with water-based life":"GG WL",
-        "Gas giant with ammonia-based life":"GG AL",
+        "Gas giant with water based life":"GG WL",
+        "Gas giant with ammonia based life":"GG AL",
         "Sudarsky class I gas giant":"GG I",
         "Sudarsky class II gas giant":"GG II",
         "Sudarsky class III gas giant":"GG III",
@@ -185,18 +186,18 @@ SCAN_ATMOTYPES={
         }
 
 SCAN_VOLCANISM={
-        "Water Magma":"H\u2082O \u0394",
-        "Sulphur Dioxide Magma":"SO\u2082 \u0394"
-        "Ammonia Magma":"NH\u2083 \u0394",
-        "Methane Magma":"CH\u2084 \u0394",
-        "Nitrogen Magma":"N\u2082 \u0394",
-        "Silicate Magma":"SiO\u2093 \u0394",
-        "Metallic Magma":"Me \u0394",
+        "Water Magma":"H\u2082O \u0466",
+        "Sulphur Dioxide Magma":"SO\u2082 \u0466",
+        "Ammonia Magma":"NH\u2083 \u0466",
+        "Methane Magma":"CH\u2084 \u0466",
+        "Nitrogen Magma":"N\u2082 \u0466",
+        "Silicate Magma":"SiO\u2093 \u0466",
+        "Metallic Magma":"Me \u0466",
         "Water Geysers":"H\u2082O \u0373",
         "Carbon Dioxide Geysers":"CO\u2082 \u0373",
         "Ammonia Geysers":"NH\u2083 \u0373",
         "Methane Geysers":"CH\u2084 \u0373",
         "Nitrogen Geysers":"N\u2082 \u0373",
         "Helium Geysers":"He \u0373",
-        "Silicate Vapour Geysers":"SiO\u2093 \u0373",
+        "Silicate Vapour Geysers":"SiO\u2093 \u0373"
         }
