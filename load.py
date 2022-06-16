@@ -56,7 +56,7 @@ def plugin_app(parent: tk.Frame) -> tk.Frame:
     this.frame = tk.Frame(parent)
     this.system = system.System()
     draw_UI()
-    this.tree.bind_all('<<DORARefresh>>', refresh())
+    this.tree.bind_all('<<DORARefresh>>', refresh)
     #fill_Tree()
     #dora_status()
     delayed_update()
@@ -168,7 +168,7 @@ def fill_Tree()->None:
     for item in this.tree.get_children():
         this.tree.delete(item)
     for body in this.system.knownbodies():
-        openitem=True
+        openitem=False
         if body['type']=="Planet":
             shortname=body["name"].replace(this.system.systemname()+" ","")
         elif body.get("type") == "Null":
@@ -191,10 +191,16 @@ def fill_Tree()->None:
             else:
                 data.append("")
 
-        if body.get("mapped")=="self":
-            tags.append("selfmapped")
-        elif body.get("mapped")=="other":
-            tags.append("mapped")
+        if body.get("type")=="Planet":
+            if body.get("mapped")=="self":
+                tags.append("selfmapped")
+            elif body.get("mapped")=="other":
+                tags.append("mapped")
+                # expand parent
+                tree_expand(body.get('parentId'))
+            else:
+                # expand parent
+                tree_expand(body.get('parentId'))
 
         if body.get("scanType") == "EDSM":
             tags.append("known")
@@ -209,6 +215,11 @@ def fill_Tree()->None:
                 this.tree.insert('',tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
 
     return None
+
+def tree_expand(bodyId:int):
+    if bodyId != None and this.tree.exists(bodyId):
+        this.tree.item(bodyId,open=True)
+
 
 def dora_status()->None:
     # check the fields we want to use exist :(
@@ -227,21 +238,24 @@ def treeDblClick(event):
     if item!='':
         logger.info(f"DoubleClicked bodyId {item}")
         idx=int(item)
+        widget=this.tree.item(idx,"tags")
+        logger.info(f"Tags: {widget}")
         logger.info(f"Details: {this.system.bodies[idx]}")
 
 def tick():
     # trigger save
     # trigger UI redraw
     this.tree.event_generate('<<DORARefresh>>')
+    this.system.to_file()
     logger.info("Ticked")
 
 def delayed_update():
     if this.timer!=None and this.timer.is_alive():
-        this.timer.stop()
-    else:
-        this.timer=Timer(15,tick)
+        this.timer.cancel()
+    this.timer=Timer(5,tick)
     this.timer.start()
 
-def refresh():
+def refresh(event):
     fill_Tree()
     dora_status()
+    this.timer=None

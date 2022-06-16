@@ -45,8 +45,11 @@ def scan_to_body(scan:dict,body:dict) -> dict:
         body['actions']="Scoop"
     elif scan.get("Landable") == True:
         body['actions']="Land"
-    if scan.get("WasMapped") == True and not body.get("mapped"):
-        body['mapped']="other"
+    if not body.get("mapped"):
+        if scan.get("WasMapped") == True:
+            body['mapped']="other"
+        else:
+            body['mapped']="no"
     return body
 
 def bodysignals(fsssignals:list,body:dict) -> dict:

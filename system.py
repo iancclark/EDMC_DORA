@@ -54,13 +54,11 @@ class System:
         self.datadir=f'{os.path.dirname(__file__)}/data'
         return
 
-    def to_file(self,systemAddress:int):
+    def to_file(self):
         if self.saved:
             return
-        if self.systemAddress != systemAddress:
-            raise Exception(f'Asked to save {systemAddress}, think we know about {self.systemAddress}')
         # make the dir
-        savefile=self._filepath(systemAddress)
+        savefile=self._filepath(self.systemAddress)
 
         os.makedirs(os.path.dirname(savefile),exist_ok=True)
         with open(savefile,'w') as f:
@@ -137,6 +135,7 @@ class System:
 
     def dssscan(self,data):
         # get body id, set to mapped
+        logger.info(f'dssscan: {data}')
         self.bodies[data['BodyID']]["mapped"]='self'
         self.saved=False
         return
@@ -153,7 +152,7 @@ class System:
     def rotate(self)->None:
         # save data
         if self.systemAddress != 0:
-            self.to_file(self.systemAddress)
+            self.to_file()
         # clear data
         self.systemAddress: int = 0
         self.systemName: str = ""
@@ -191,6 +190,6 @@ class System:
 
     def shut(self):
         if self.systemAddress != 0:
-            self.to_file(self.systemAddress);
+            self.to_file();
             with open(f'{self.data}/lastsystem','w') as f:
                 f.write(str(self.systemAddress))
