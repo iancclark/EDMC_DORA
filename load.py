@@ -222,8 +222,11 @@ def fill_Tree()->None:
     return None
 
 def tree_expand(bodyId:int):
-    if bodyId != None and this.tree.exists(bodyId) and this.displaymode['text']=="Collapse mapped":
+    if bodyId != None and this.tree.exists(bodyId) and this.displaymode['text']=="Collapse mapped" and bodyId!='':
         this.tree.item(bodyId,open=True)
+        # this might have to recurse :(
+        tree_expand(this.tree.parent(bodyId))
+        # what could possibly go wrong...
 
 
 def dora_status()->None:
