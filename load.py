@@ -123,6 +123,8 @@ def draw_UI()->None:
     this.frame.columnconfigure(0,weight=1)
     this.status = ttk.Label(this.frame,wraplength=200,justify="left",text="D O R A - Awaiting initialisation")
     this.status.grid(row=0,columnspan=2,sticky=tk.EW)
+    this.displaymode=tk.Button(this.frame,text="Collapse mapped",command=displayMode)
+    this.displaymode.grid(row=0,sticky=tk.E)
     # #0 is a special case :|
     this.tree = ttk.Treeview(this.frame,
             columns=[colinfo["name"] for colinfo in TREE_COLUMNS],
@@ -168,17 +170,20 @@ def fill_Tree()->None:
     for item in this.tree.get_children():
         this.tree.delete(item)
     for body in this.system.knownbodies():
-        openitem=False
+        if this.displaymode['text'].startswith("Collapse"):
+            openitem=False
+        else:
+            openitem=True
         if body['type']=="Planet":
             shortname=body["name"].replace(this.system.systemname()+" ","")
         elif body.get("type") == "Null":
             if body.get("name"):
                 shortname=body['name'].replace(this.system.systemname()+" ","")
             else:
-                shortname="\u047a"
+                # probably a barycentre, maybe a nice improvement would be to put short names of bodies here, comma separated?
+                shortname=f"\u047a"
         elif body.get("type")=="Ring":
             shortname="\u25cc"
-            openitem=False
         elif body.get("name"):
             shortname=body["name"]
         else:
@@ -217,7 +222,7 @@ def fill_Tree()->None:
     return None
 
 def tree_expand(bodyId:int):
-    if bodyId != None and this.tree.exists(bodyId):
+    if bodyId != None and this.tree.exists(bodyId) and this.displaymode['text']=="Collapse mapped":
         this.tree.item(bodyId,open=True)
 
 
@@ -259,3 +264,14 @@ def refresh(event):
     fill_Tree()
     dora_status()
     this.timer=None
+
+def displayMode():
+    if this.displaymode['text']=="Collapse mapped":
+        this.displaymode['text']="Collapse all"
+    elif this.displaymode['text']=="Collapse all":
+        this.displaymode['text']="Expand all"
+    else:
+        this.displaymode['text']="Collapse mapped"
+    fill_Tree()
+
+    return

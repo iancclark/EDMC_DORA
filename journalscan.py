@@ -33,7 +33,7 @@ def scan_to_body(scan:dict,body:dict) -> dict:
     elif scan.get("AtmosphereType"):
         logger.info(f"Unknown AtmosphereType type: {scan['AtmosphereType']}")
     if scan.get("Volcanism") in SCAN_VOLCANISM:
-        body["volcanism"]=SCAN_VOLCANISM[scan.get("Volcanism").replace(('Major','Minor','Volcanism'),('','',''))]
+        body["volcanism"]=SCAN_VOLCANISM[scan.get("Volcanism").replace(('major ','minor ',' volcanism'),('','',''))]
     elif scan.get("Volcanism"):
         logger.info(f"Unknown volcanism type: {scan['Volcanism']}")
     if scan.get("SurfaceGravity"):
@@ -189,18 +189,18 @@ SCAN_ATMOTYPES={
         }
 
 SCAN_VOLCANISM={
-        "Water Magma":"H\u2082O \u0466",
-        "Sulphur Dioxide Magma":"SO\u2082 \u0466",
-        "Ammonia Magma":"NH\u2083 \u0466",
-        "Methane Magma":"CH\u2084 \u0466",
-        "Nitrogen Magma":"N\u2082 \u0466",
-        "Silicate Magma":"SiO\u2093 \u0466",
-        "Metallic Magma":"Me \u0466",
-        "Water Geysers":"H\u2082O \u0373",
-        "Carbon Dioxide Geysers":"CO\u2082 \u0373",
-        "Ammonia Geysers":"NH\u2083 \u0373",
-        "Methane Geysers":"CH\u2084 \u0373",
-        "Nitrogen Geysers":"N\u2082 \u0373",
-        "Helium Geysers":"He \u0373",
-        "Silicate Vapour Geysers":"SiO\u2093 \u0373"
+        "water magma":"H\u2082O \u0466",
+        "sulphur dioxide magma":"SO\u2082 \u0466",
+        "ammonia magma":"NH\u2083 \u0466",
+        "methane magma":"CH\u2084 \u0466",
+        "nitrogen magma":"N\u2082 \u0466",
+        "silicate magma":"SiO\u2093 \u0466",
+        "metallic magma":"Me \u0466",
+        "water geysers":"H\u2082O \u0373",
+        "carbon dioxide geysers":"CO\u2082 \u0373",
+        "ammonia geysers":"NH\u2083 \u0373",
+        "methane geysers":"CH\u2084 \u0373",
+        "nitrogen geysers":"N\u2082 \u0373",
+        "helium geysers":"He \u0373",
+        "silicate vapour geysers":"SiO\u2093 \u0373"
         }

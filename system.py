@@ -178,11 +178,11 @@ class System:
                     self.bodies[childId]['parentId']=parentId
                     if self.bodies[parentId]!=None:
                         if self.bodies[parentId].get("children"):
-                            self.bodies[parentId]["children"].append(childId)
+                            self.bodies[parentId]["children"].add(childId)
                         else:
-                            self.bodies[parentId]["children"]=list([childId])
+                            self.bodies[parentId]["children"]=set([childId])
                     else:
-                        self.bodies[parentId]={"type":bodytype,"bodyId":parentId,"children":list([childId])}
+                        self.bodies[parentId]={"type":bodytype,"bodyId":parentId,"children":set([childId])}
                     childId=parentId
         else:
             self.bodies[body['bodyId']]['parentId']=0
