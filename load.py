@@ -4,7 +4,6 @@ import semantic_version
 from typing import Optional, Dict, Any
 import json
 from threading import Timer
-from time import sleep
 
 import tkinter as tk
 from tkinter import ttk
@@ -14,62 +13,21 @@ from theme import theme
 from config import appname, appversion, config
 import timeout_session
 
+import system
+
 plugin_name=os.path.basename(os.path.dirname(__file__))
 logger=logging.getLogger(f'{appname}.{plugin_name}')
 
-SCAN_STAR_TO_EDSMBODY={
-        "BodyName":"name",
-        "BodyID":"bodyId",
-        "Parents":"parents",
-        "DistanceFromArrivalLS":"distanceToArrival", 
-        "StarType":"subType", # rough match
-        "Subclass":"spectralClass", # very rough match
-        "StellarMass":"solarMasses",
-        "Radius":"solarRadius", # units wrong
-        "AbsoluteMagnitude":"absoluteMagnitude",
-        "Age_MY":"age",
-        "SurfaceTemperature":"surfaceTemperature",
-        "Luminosity":"luminosity",
-        "SemiMajorAxis":"semiMajorAxis",
-        "Eccentricity":"orbitalEccentricity",
-        "OrbitalInclination":"orbitalInclination",
-        "Periapsis":"argOfPeriapsis",
-        "OrbitalPeriod":"orbitalPeriod",
-        "RotationalPeriod":"rotationalPeriod", # units wrong
-        "AxialTilt":"axialTilt"
-        }
-SCAN_PLANET_TO_EDSMBODY={
-        "BodyName":"name",
-        "BodyID":"bodyId",
-        "Parents":"parents",
-        "DistanceFromArrivalLS":"distanceToArrival",
-        "TidalLock":"rotationalPeriodTidallyLocked",
-        "TerraformState":"terraformingState",
-        "PlanetClass":"subType", # rough match
-        "AtmosphereType":"atmosphereType", # rough match
-        "AtmosphereComposition":"atmosphereComposition", # rough match
-        "Volcanism":"volcanismType",
-        "MassEM":"earthMasses",
-        "Radius":"radius", # units wrong
-        "SurfaceGravity":"gravity",
-        "SurfaceTemperature":"surfaceTemperature",
-        "SurfacePressure":"surfacePressure",
-        "Landable":"isLandable",
-        "Composition":"solidComposition",
-        "SemiMajorAxis":"semiMajorAxis",
-        "Eccentricity":"orbitalEccentricity",
-        "OrbitalInclination":"orbitalInclination",
-        "OrbitalPeriod":"orbitalPeriod",
-        "RotationalPeriod":"rotationalPeriod", # units wrong
-        "AxialTilt":"axialTilt"
-        }
 TREE_COLUMNS=[
-        {"name":"class","header":"Class","field":"subType","show":True,"width":20},
-        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20},
-        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20},
-        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20},
-        {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20},
-        {"name":"land","header":"Land","field":"isLandable","show":True,"width":5}]
+        {"name":"class","header":"Class","field":"subType","show":True,"width":20, "anchor":tk.W,"format":"{}"},
+        {"name":"dist","header":"Arr.Dist","field":"distanceToArrival","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}LS"},
+        {"name":"grav","header":"Gravity","field":"gravity","show":True,"width":20,"anchor":tk.E,"format":"{:.2f}g"},
+        {"name":"temp","header":"Temp","field":"surfaceTemperature","show":True,"width":20,"anchor":tk.E,"format":"{:.0f}K"},
+        {"name":"atmo","header":"Atm","field":"atmosphereType","show":True,"width":20,"anchor":tk.W,"format":"{}"},
+        {"name":"land","header":"Actions","field":"actions","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        {"name":"geoSignals","header":"Geo","field":"geoSignals","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        {"name":"bioSignals","header":"Bio","field":"bioSignals","show":True,"width":5,"anchor":tk.W,"format":"{}"},
+        ]
 
 if not logger.hasHandlers():
     level = logging.INFO
@@ -84,186 +42,89 @@ if not logger.hasHandlers():
 class This:
     def __init__(self):
         self.frame: tk.Frame = None
-        self.header: ttk.Label = None
+        self.status: ttk.Label = None
         self.tree: ttk.Treeview = None
-        self.session = timeout_session.new_session()
-        self.systeminfo: Dict = {}
-        self.systemid: Int = None
-        self.datadir=f'{os.path.dirname(__file__)}/data'
-        self.timer: Timer = None
+        self.system: system = None
+        self.timer=None
 
 this = This()
 
 def plugin_start3(plugin_dir: str) -> str:
-    this.timer=Timer(30,timedsave)
     return plugin_name
 
 def plugin_app(parent: tk.Frame) -> tk.Frame:
     this.frame = tk.Frame(parent)
+    this.system = system.System()
     draw_UI()
-    #get_bodies(0x0000149c280025a9)
+    this.tree.bind_all('<<DORARefresh>>', refresh)
     #fill_Tree()
+    #dora_status()
+    delayed_update()
     return this.frame
 
 def cmdr_data(data:Dict[str,Any], is_beta: bool)->None:
     logger.info("Cmdr data")
-    if this.systemid == None and data.get("starsystem") and data.get("systemaddress"):
-        this.systemid=data.get("starsystem").get("systemaddress")
-        get_bodies(this.systemid)
+    #if this.systemid == None and data.get("starsystem") and data.get("systemaddress"):
+        # might be nice to get saved data?
+    #    return None
     return None
+
+def plugin_stop()->None:
+    # perhaps save?
+    this.system.shut()
+    return
 
 def journal_entry(cmdr: str, is_beta: bool, system: str, station: str, entry: Dict[str,Any], state: Dict[str, Any]) -> None:
     # Think about using match
     if entry['event'] in ('FSDJump','CarrierJump','Location'):
-        # We have loaded/died/arrived somewhere
-        
-        # Save any existing data
-        if "bodyDict" in this.systeminfo and this.systemid==this.systeminfo.id64:
-            save_bodies(this.systemid)
-        this.systemid=entry['SystemAddress']
-
-        # Get cached data, fallback to EDSM
-        get_bodies(entry['SystemAddress'])
-
-        # clear tree 
-        for item in this.tree.get_children():
-            this.tree.delete(item)
-        if not this.systeminfo['bodyCount']:
-            this.header.config(text='Honk required')
-        else:
-            header_text()
+        logger.info(f'FSDJump or similar: {entry["SystemAddress"]}')
+        this.system.fsdjump(entry)
         # fill tree
-        fill_Tree()
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
 
     if entry['event'] == 'FSSDiscoveryScan':
         # honk!
-        this.systeminfo["bodyCount"]=entry["BodyCount"]
-        # What to do if no bodydict...
-        # TODO check body systemaddress against current systemaddress
-        get_bodies(entry['SystemAddress'])
-        header_text()
-        fill_Tree()
+        this.system.fsshonk(entry)
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
+
     # more detailed scan, 
     if entry['event'] == 'Scan':
-        # Useful info:
-        #   BodyName, BodyID, Parents, SystemAddress, PlanetClass, Atmosphere,
-        #   Volcanism, MassEM, Radius, Landable, WasDiscovered, WasMapped
-        #   ScanType (Basic, Detailed, NavBeacon, NavBeaconDetail, AutoScan)
-        # TODO check body systemaddress against current systemaddress
-        body={"scanType":entry["ScanType"]}
-        if "PlanetClass" in entry.keys():
-            body["type"]="Planet"
-            for scankey,edsmkey in SCAN_PLANET_TO_EDSMBODY.items():
-                if scankey in entry.keys():
-                    body[edsmkey]=entry[scankey]
-        elif "StarType" in entry.keys():
-            for scankey,edsmkey in SCAN_STAR_TO_EDSMBODY.items():
-                if scankey in entry.keys():
-                    body[edsmkey]=entry[scankey]
-        # find item in list
-        if not 'bodyDict' in this.systeminfo:
-            this.systeminfo['bodyDict']={}
-        this.systeminfo['bodyDict'][entry['BodyID']]=body
-        fill_Tree()
-        if this.timer.is_alive():
-            this.timer.cancel()
-        this.timer=Timer(30,timedsave)
-        this.timer.start()
-        header_text()
+        logger.info(f'Scan({entry["ScanType"]}) : {entry["SystemAddress"]}')
+        this.system.scan(entry)
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
         return None
     if entry['event'] == "FSSBodySignals":
-        # Surface stuff, e.g. bio/vulc.
-        # Useful info:
-        # [ "Type":"$SAA_SignalType_{x}", "Count":{y} ]
-        # Biological, Geological
+        logger.info(f'BodySignals: {entry["SystemAddress"]}')
+        this.system.fsssignals(entry)
+        dora_status()
         return None
     # DSS done
     if entry['event'] == 'SAAScanComplete': 
-        # Useful info:
-        #  BodyID
-        # Find the bodyid, set "mapped: true"
-        this.systeminfo["bodyDict"][entry["bodyId"]]["mapped"]=True
-        if this.timer.is_alive():
-            this.timer.cancel()
-        this.timer=Timer(30,timedsave)
-        this.timer.start()
-        header_text()
-        fill_Tree()
-        return None
-    # centre of gravity of pair
-    if entry['event']=='ScanBaryCentre': 
+        logger.info(f'SurfaceScanComplete: {entry["SystemAddress"]}')
+        this.system.dssscan(entry)
+        #dora_status()
+        #fill_Tree()
+        delayed_update()
+        this.tree.see(entry['BodyID'])
         return None
     return None
-
-def parental_placeholders(parents: list) -> int:
-    """
-    Parent info from a scan is a list of ordered dictionaries, starting with
-    the direct parent, then parent's parent etc. Annoyingly, each parent is in
-    a dict, with type of parent as the key and the bodyid as the value.
-
-    If we don't already have the parent(s) in the tree we'll add placeholders
-    """
-    parentiid=0
-    if parents is None:
-        return ''
-    # Find out if parent exists. If not, create
-    for p in reversed(parents):
-        for obj,iid in p.items():
-            if not this.tree.exists(iid):
-                if parentiid == iid:
-                    this.tree.insert('',0,iid=iid,open=True,text="?",values=(f'{obj}'))
-                else:
-                    this.tree.insert(parentiid,0,iid=iid,open=True,text="?",values=(f'{obj}'))
-            parentiid=iid
-    return parentiid
-
-def get_edsm_bodies(systemid: int) -> None:
-    try:
-        r=this.session.get(f'https://www.edsm.net/api-system-v1/bodies?systemId64={systemid}')
-        r.raise_for_status()
-        this.systeminfo=r.json()
-        # I don't like the way EDSM saves bodies. There. I've said it.
-        this.systeminfo['bodyDict']={}
-        for body in this.systeminfo['bodies']:
-            body['scanType']="EDSM"
-            this.systeminfo['bodyDict'][body['bodyId']]=body;
-    except Exception as e:
-        logger.warning('Problem when getting system info from EDSM: {0}'.format(e))
-    save_bodies(systemid)
-
-def get_cached_bodies(path) -> bool:
-    if os.path.exists(path):
-        with open(path, 'r') as f:
-            this.systeminfo=json.load(f)
-            return True
-    return False
-
-def save_bodies(systemid: int) -> None:
-    try:
-        with open(systemid_path(systemid),'w') as f:
-            json.dump(this.systeminfo,f)
-    except Exception as e:
-        logger.warning('Problem saving scan data to file: {0}'.format(e))
-
-
-def systemid_path(systemid: int) -> str:
-    file=f'{systemid:016x}.json'
-    subdir=file[0:2]
-    os.makedirs(f'{this.datadir}/{subdir}',exist_ok=True)
-    return f'{this.datadir}/{subdir}/{file}'
-
-def get_bodies(systemid: int) -> None:
-    if not get_cached_bodies(systemid_path(systemid)):
-        get_edsm_bodies(systemid)
 
 def draw_UI()->None:
     this.frame.rowconfigure(1,weight=1)
     this.frame.rowconfigure(0,weight=1)
     this.frame.columnconfigure(0,weight=1)
-    this.header = ttk.Label(this.frame,wraplength=200,justify="left",text="D O R A - Awaiting initialisation")
-    this.header.grid(row=0,columnspan=2,sticky=tk.EW)
+    this.status = ttk.Label(this.frame,wraplength=200,justify="left",text="D O R A - Awaiting initialisation")
+    this.status.grid(row=0,columnspan=2,sticky=tk.EW)
+    this.displaymode=tk.Button(this.frame,text="Collapse mapped",command=displayMode)
+    this.displaymode.grid(row=0,sticky=tk.E)
     # #0 is a special case :|
     this.tree = ttk.Treeview(this.frame,
             columns=[colinfo["name"] for colinfo in TREE_COLUMNS],
@@ -271,6 +132,8 @@ def draw_UI()->None:
             style="dora.Treeview")
     this.tree.column("#0",minwidth=50,width=50,stretch="yes")
     this.tree.heading("#0",text="Body name")
+
+    this.tree.bind("<Double-1>", treeDblClick)
 
     style=ttk.Style()
     # Win32 theme doesn't let us change the appearance much. Some tricks here perhaps:
@@ -286,60 +149,129 @@ def draw_UI()->None:
     style.configure('TSizegrip',background='black',foreground='#ff8800')
     this.tree.tag_configure('scanned',font=(None,8,"bold"))
     this.tree.tag_configure('known',font=(None,8,"italic"))
-    this.tree.tag_configure('mapped',foreground='blue')
+    this.tree.tag_configure('mapped',foreground='cyan')
+    this.tree.tag_configure('selfmapped',foreground='blue')
 
     for colinfo in TREE_COLUMNS:
-        this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes")
+        this.tree.column(colinfo["name"],width=20,minwidth=colinfo["width"],stretch="yes",anchor=colinfo["anchor"])
         this.tree.heading(colinfo["name"],text=colinfo["header"])
 
     scrollbar=ttk.Scrollbar(this.frame,orient=tk.VERTICAL, command=this.tree.yview)
     this.tree.configure(yscroll=scrollbar.set)
     this.tree.grid(row=1,column=0,sticky=tk.EW)
     scrollbar.grid(row=1,column=1,sticky=tk.NS)
+    # This grabber allows resizing with themed EDMC window
     grabber=ttk.Sizegrip(this.frame)
     grabber.grid(row=2,column=1,sticky=tk.SE)
     theme.update(this.frame)
 
 def fill_Tree()->None:
-    # fill the tree from this.systeminfo.
-    if "bodyDict" not in this.systeminfo:
-        logger.info("No body info to use yet")
-        return
-    for bodyId,body in this.systeminfo['bodyDict'].items():
-        if "name" not in body:
-            continue
+    # clear tree 
+    for item in this.tree.get_children():
+        this.tree.delete(item)
+    for body in this.system.knownbodies():
+        if this.displaymode['text'].startswith("Collapse"):
+            openitem=False
+        else:
+            openitem=True
+        if body['type']=="Planet":
+            shortname=body["name"].replace(this.system.systemname()+" ","")
+        elif body.get("type") == "Null":
+            if body.get("name"):
+                shortname=body['name'].replace(this.system.systemname()+" ","")
+            else:
+                # probably a barycentre, maybe a nice improvement would be to put short names of bodies here, comma separated?
+                shortname=f"\u047a"
+        elif body.get("type")=="Ring":
+            shortname="\u25cc"
+        elif body.get("name"):
+            shortname=body["name"]
+        else:
+            logger.warn(f"Missing name for {body}")
         data: list[str]=[] 
         tags: list[str]=[]
-        for field in [colinfo['field'] for colinfo in TREE_COLUMNS]:
+        for field,fmt in [(colinfo['field'],colinfo['format']) for colinfo in TREE_COLUMNS]:
             if field in body:
-                data.append(body[field])
+                data.append(fmt.format(body[field]))
             else:
                 data.append("")
-        parent=parental_placeholders(body['parents'])
-        if body.get("mapped"):
-            tags.append("mapped")
-        else:
-            tags.append("unmapped")
+
+        if body.get("type")=="Planet":
+            if body.get("mapped")=="self":
+                tags.append("selfmapped")
+            elif body.get("mapped")=="other":
+                tags.append("mapped")
+                # expand parent
+                tree_expand(body.get('parentId'))
+            else:
+                # expand parent
+                tree_expand(body.get('parentId'))
+
         if body.get("scanType") == "EDSM":
             tags.append("known")
         else:
             tags.append("scanned")
-        if this.tree.exists(bodyId):
-            this.tree.item(bodyId,values=data,open=True,tags=tags)
+        if this.tree.exists(body['bodyId']):
+            this.tree.item(body['bodyId'],values=data,open=openitem,tags=tags)
         else:
-            this.tree.insert(parent,tk.END,iid=bodyId,text=body["name"],values=data,open=True,tags=tags)
+            if this.tree.exists(body['parentId']):
+                this.tree.insert(body["parentId"],tk.END,iid=body["bodyId"],text=shortname,values=data,open=openitem,tags=tags)
+            else:
+                this.tree.insert('',tk.END,iid=body["bodyId"],text=shortname,values=data,open=True,tags=tags)
 
     return None
 
-def timedsave()->None:
-    while not config.shutting_down:
-        if this.systemid is not None:
-            save_bodies(this.systemid)
+def tree_expand(bodyId:int):
+    if bodyId != None and this.tree.exists(bodyId) and this.displaymode['text']=="Collapse mapped":
+        this.tree.item(bodyId,open=True)
 
-def header_text()->None:
+
+def dora_status()->None:
     # check the fields we want to use exist :(
-    total_bodies=this.systeminfo.get("bodyCount")
-    total_planets=len([k for k,v in this.systeminfo["bodyDict"].items() if v.get("type")=="Planet"])
-    self_scanned=len([k for k,v in this.systeminfo["bodyDict"].items() if v.get("scanType") != "EDSM"])
-    self_mapped=len([k for k,v in this.systeminfo["bodyDict"].items() if "mapped" in v.keys()])
-    this.header.config(text=f'Astro: {self_scanned}/{total_bodies} Surface: {self_mapped}/{total_planets}')
+    # bodies, planets, scanned, mapped
+
+    bodies=this.system.getBodyCount()
+    kb=this.system.knownbodies() 
+    scanned=len([x for x in kb if x['type'] in ('Planet','Star') and x['scanType']!="EDSM"])
+    mapped=len([x for x in kb if x['type'] == 'Planet' and x.get('mapped')=='self'])
+    planets=len([x for x in kb if x['type']=="Planet"])
+    this.status.config(text=f'DORA: Scanned: {scanned}/{bodies} Mapped: {mapped}/{planets}')
+    return
+
+def treeDblClick(event):
+    item=this.tree.identify('item',event.x,event.y)
+    if item!='':
+        logger.info(f"DoubleClicked bodyId {item}")
+        idx=int(item)
+        widget=this.tree.item(idx,"tags")
+        logger.info(f"Tags: {widget}")
+        logger.info(f"Details: {this.system.bodies[idx]}")
+
+def tick():
+    # trigger save
+    # trigger UI redraw
+    this.tree.event_generate('<<DORARefresh>>')
+    this.system.to_file()
+    logger.info("Ticked")
+
+def delayed_update():
+    if this.timer!=None and this.timer.is_alive():
+        this.timer.cancel()
+    this.timer=Timer(5,tick)
+    this.timer.start()
+
+def refresh(event):
+    fill_Tree()
+    dora_status()
+    this.timer=None
+
+def displayMode():
+    if this.displaymode['text']=="Collapse mapped":
+        this.displaymode['text']="Collapse all"
+    elif this.displaymode['text']=="Collapse all":
+        this.displaymode['text']="Expand all"
+    else:
+        this.displaymode['text']="Collapse mapped"
+    fill_Tree()
+
+    return
