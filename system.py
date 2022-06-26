@@ -28,9 +28,12 @@ class System:
         self.bodies= SparseList()
         self.datadir=f'{os.path.dirname(__file__)}/data'
         self.saved=True
-        with open(f'{self.datadir}/lastsystem','r') as f:
-            self.systemAddress=int(f.read())
-            self.from_file(self.systemAddress)
+        try:
+            with open(f'{self.datadir}/lastsystem','r') as f:
+                self.systemAddress=int(f.read())
+                self.from_file(self.systemAddress)
+        except FileNotFoundError:
+            logger.warn("No system saved from previous run")
         return None
 
     def from_edsm(self,systemAddress:int):
@@ -48,10 +51,13 @@ class System:
     def from_file(self,systemAddress:int):
         if self.systemAddress !=0 and self.systemAddress != systemAddress:
             raise Exception("Asked to load data from file when I have some data")
-        with open(self._filepath(systemAddress),'r') as f:
-            self.__dict__=json.load(f)
-        self.saved=True
-        self.datadir=f'{os.path.dirname(__file__)}/data'
+        try:
+            with open(self._filepath(systemAddress),'r') as f:
+                self.__dict__=json.load(f)
+            self.saved=True
+            self.datadir=f'{os.path.dirname(__file__)}/data'
+        except json.decoder.JSONDecodeError:
+            logger.warn("Corrupt datafile")
         return
 
     def to_file(self):
@@ -61,8 +67,12 @@ class System:
         savefile=self._filepath(self.systemAddress)
 
         os.makedirs(os.path.dirname(savefile),exist_ok=True)
-        with open(savefile,'w') as f:
+        # in case the write gets interrupted for some reason
+        # write to a temporary file
+        with open(savefile+".tmp",'w') as f:
             json.dump({k:v for k,v in self.__dict__.items() if k not in ('timer','datadir','saved')},f)
+        # and rotate.
+        os.replace(savefile+".tmp",savefile)
         self.saved=True
 
     def scan(self,data):

@@ -135,18 +135,20 @@ def draw_UI()->None:
 
     this.tree.bind("<Double-1>", treeDblClick)
 
-    style=ttk.Style()
-    # Win32 theme doesn't let us change the appearance much. Some tricks here perhaps:
-    #  https://stackoverflow.com/questions/42708050/tkinter-treeview-heading-styling/42738716#42738716
-    style.theme_use("default")
-    style.map("dora.Treeview.Heading",
-            background=[('active','#ff8800'),('pressed','!focus','#303030')],
-            foreground=[('active','black'),('pressed','!focus','#ff8800')]
-        )
-    style.configure('dora.Treeview',font=(None,8),foreground='#ff8800',background='#181818',fieldbackground='#181818',)
-    style.configure('dora.Treeview.Heading',foreground='#ff8800',background='#303030')
-    style.configure('Vertical.Scrollbar',arrowcolor='#ff8800',background='#303030',troughcolor='black')
-    style.configure('TSizegrip',background='black',foreground='#ff8800')
+    if config.get_int('theme'):
+        style=ttk.Style()
+        # Win32 theme doesn't let us change the appearance much. Some tricks here perhaps:
+        #  https://stackoverflow.com/questions/42708050/tkinter-treeview-heading-styling/42738716#42738716
+        # For now use the default tk theme
+        style.theme_use("clam")
+        style.map("dora.Treeview.Heading",
+                background=[('active','#ff8800'),('pressed','!focus','#303030')],
+                foreground=[('active','black'),('pressed','!focus','#ff8800')]
+            )
+        style.configure('dora.Treeview',font=(None,8),foreground='#ff8800',background='#181818',fieldbackground='#181818',)
+        style.configure('dora.Treeview.Heading',foreground='#ff8800',background='#303030')
+        style.configure('Vertical.Scrollbar',arrowcolor='#ff8800',background='#303030',troughcolor='black')
+        style.configure('TSizegrip',background='black',foreground='#ff8800')
     this.tree.tag_configure('scanned',font=(None,8,"bold"))
     this.tree.tag_configure('known',font=(None,8,"italic"))
     this.tree.tag_configure('mapped',foreground='cyan')
